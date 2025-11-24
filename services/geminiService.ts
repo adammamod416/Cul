@@ -1,7 +1,7 @@
 import { GoogleGenAI, Type } from "@google/genai";
 
 export const solveMathWithGemini = async (apiKey: string, problem: string): Promise<{ answer: string; explanation: string }> => {
-  if (!apiKey) {
+  if (. AIzaSyBIg4NyQ1vu5gEVwJeBk-R4_l6s6f9HtJQ) {
     throw new Error("يرجى إدخال مفتاح API في الإعدادات للمتابعة.");
   }
 
