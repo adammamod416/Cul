@@ -1,0 +1,5 @@
+{
+  "name": "الحاسبة الذكية (Smart Calc)",
+  "description": "A modern, dual-mode calculator featuring a standard arithmetic interface and an AI-powered solver for complex math problems using Gemini 2.5 Flash.",
+  "requestFramePermissions": []
+}
