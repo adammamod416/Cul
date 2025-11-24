@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { CalculatorMode, HistoryItem } from './types';
 import Button from './components/Button';
 import HistoryPanel from './components/HistoryPanel';
+import SettingsModal from './components/SettingsModal';
 import { solveMathWithGemini } from './services/geminiService';
 
 const App: React.FC = () => {
@@ -10,8 +11,10 @@ const App: React.FC = () => {
   const [result, setResult] = useState<string>('');
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   
   // AI States
+  const [apiKey, setApiKey] = useState(() => localStorage.getItem('gemini_api_key') || '');
   const [aiPrompt, setAiPrompt] = useState('');
   const [aiLoading, setAiLoading] = useState(false);
   const [aiResponse, setAiResponse] = useState<{ answer: string; explanation: string } | null>(null);
@@ -32,7 +35,8 @@ const App: React.FC = () => {
   // Handle Keyboard Input
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (mode === CalculatorMode.AI_SOLVER) return;
+      if (mode === CalculatorMode.AI_SOLVER && document.activeElement?.tagName === 'TEXTAREA') return;
+      if (isSettingsOpen) return;
 
       const key = e.key;
       if (/[0-9]/.test(key)) {
@@ -44,7 +48,7 @@ const App: React.FC = () => {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [mode, input]); // Added input to deps to ensure latest state is accessed if needed, though handlePress uses setter functional updates mostly
+  }, [mode, input, isSettingsOpen]);
 
   const addToHistory = (expression: string, calcResult: string, type: 'standard' | 'ai') => {
     const newItem: HistoryItem = {
@@ -90,8 +94,6 @@ const App: React.FC = () => {
       const res = safeCalculate(input);
       setResult(res);
       addToHistory(input, res, 'standard');
-      // Optional: reset input to result for chain calculations
-      // setInput(res); 
     } else if (val === '√') {
        try {
          const currentVal = parseFloat(safeCalculate(input) || input);
@@ -116,18 +118,36 @@ const App: React.FC = () => {
     }
   };
 
+  const handleSaveApiKey = (key: string) => {
+    setApiKey(key);
+    localStorage.setItem('gemini_api_key', key);
+  };
+
   const handleAiSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!aiPrompt.trim()) return;
 
+    if (!apiKey) {
+        setIsSettingsOpen(true);
+        return;
+    }
+
     setAiLoading(true);
     setAiResponse(null);
 
-    const res = await solveMathWithGemini(aiPrompt);
-    
-    setAiLoading(false);
-    setAiResponse(res);
-    addToHistory(aiPrompt, res.answer, 'ai');
+    try {
+        const res = await solveMathWithGemini(apiKey, aiPrompt);
+        setAiLoading(false);
+        setAiResponse(res);
+        addToHistory(aiPrompt, res.answer, 'ai');
+    } catch (error: any) {
+        setAiLoading(false);
+        if (error.message.includes('API')) {
+            setIsSettingsOpen(true);
+        } else {
+            alert(error.message);
+        }
+    }
   };
 
   return (
@@ -156,10 +176,17 @@ const App: React.FC = () => {
         }}
       />
 
+      <SettingsModal 
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        onSave={handleSaveApiKey}
+        currentKey={apiKey}
+      />
+
       <div className="w-full max-w-md bg-slate-900/80 backdrop-blur-xl border border-slate-700/50 rounded-3xl shadow-2xl overflow-hidden flex flex-col h-[85vh] sm:h-auto sm:min-h-[700px]">
         
         {/* Header / Tabs */}
-        <div className="flex p-2 bg-slate-800/50 border-b border-slate-700/50">
+        <div className="flex p-2 bg-slate-800/50 border-b border-slate-700/50 gap-2">
           <button 
             onClick={() => setMode(CalculatorMode.STANDARD)}
             className={`flex-1 py-2 rounded-xl text-sm font-bold transition-all ${mode === CalculatorMode.STANDARD ? 'bg-slate-700 text-white shadow-md' : 'text-slate-400 hover:text-slate-200'}`}
@@ -171,18 +198,33 @@ const App: React.FC = () => {
             className={`flex-1 py-2 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 ${mode === CalculatorMode.AI_SOLVER ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200'}`}
           >
             <span>ذكية (Gemini)</span>
+            {/* Logic Icon */}
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
               <path d="M12 2a1 1 0 0 1 .993.883L13 3v1.164A9.957 9.957 0 0 1 19.836 11H21a1 1 0 0 1 .993.883L22 12a1 1 0 0 1-.883.993L21 13h-1.164a9.954 9.954 0 0 1-6.836 6.836V21a1 1 0 0 1-.883.993L12 22a1 1 0 0 1-.993-.883L11 21v-1.164a9.957 9.957 0 0 1-6.836-6.836H3a1 1 0 0 1-.993-.883L2 12a1 1 0 0 1 .883-.993L3 11h1.164a9.954 9.954 0 0 1 6.836-6.836V3a1 1 0 0 1 .883-.993L12 2zM12 6.5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11z" fillRule="evenodd"/>
             </svg>
           </button>
-          <button 
-            onClick={() => setIsHistoryOpen(true)}
-            className="ml-2 w-10 h-10 flex items-center justify-center rounded-xl bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700 transition-colors"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-          </button>
+          
+          <div className="flex gap-1">
+             <button 
+                onClick={() => setIsSettingsOpen(true)}
+                className={`w-10 h-10 flex items-center justify-center rounded-xl transition-colors ${!apiKey ? 'bg-amber-500/10 text-amber-500 border border-amber-500/20 animate-pulse' : 'bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700'}`}
+                title="API Key Settings"
+             >
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+                   <path strokeLinecap="round" strokeLinejoin="round" d="M10.343 3.94c.09-.542.56-.94 1.11-.94h1.093c.55 0 1.02.398 1.11.94l.175 1.059c.991.214 1.914.618 2.768 1.166l.966-.356c.532-.196 1.119.062 1.353.593l.546 1.233c.234.531.063 1.157-.391 1.458l-.837.558c.036.335.056.674.056 1.018 0 .344-.02.683-.056 1.018l.837.558c.454.301.625.927.391 1.458l-.546 1.233c-.234.531-.821.789-1.353.593l-.966-.356c-.854.548-1.777.952-2.768 1.166l-.175 1.059c-.09.542-.56.94-1.11.94h-1.094c-.55 0-1.019-.398-1.11-.94l-.175-1.059c-.991-.214-1.914-.618-2.768-1.166l-.966.356c-.532.196-1.119-.062-1.353-.593l-.546-1.233c-.234-.531-.063-1.157.391-1.458l.837-.558c-.036-.335-.056-.674-.056-1.018 0-.344.02-.683.056-1.018l-.837-.558c-.454-.301-.625-.927-.391-1.458l.546-1.233c.234-.531.821-.789 1.353-.593l.966.356c.854-.548 1.777-.952 2.768-1.166l.175-1.059z" />
+                   <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+             </button>
+             <button 
+                onClick={() => setIsHistoryOpen(true)}
+                className="w-10 h-10 flex items-center justify-center rounded-xl bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700 transition-colors"
+                title="History"
+             >
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+             </button>
+          </div>
         </div>
 
         {/* Content Area */}
@@ -193,7 +235,6 @@ const App: React.FC = () => {
               {/* Display */}
               <div className="flex-1 p-6 flex flex-col justify-end items-end space-y-2 bg-gradient-to-b from-slate-900 to-slate-800">
                 <div className="text-slate-400 text-lg sm:text-xl font-mono h-8 overflow-hidden w-full text-left" dir="ltr">
-                   {/* Showing previous input or expression logic if we wanted detailed steps */}
                    {result && input !== result ? input : ''}
                 </div>
                 <div className={`text-white font-mono font-bold w-full text-left break-all transition-all duration-300 ${input.length > 12 ? 'text-4xl' : 'text-5xl sm:text-6xl'}`} dir="ltr">
@@ -243,6 +284,7 @@ const App: React.FC = () => {
                  </div>
                  <h2 className="text-xl font-bold text-white mb-2">مساعد الرياضيات الذكي</h2>
                  <p className="text-slate-400 text-sm">اكتب أي مسألة رياضية معقدة وسأقوم بحلها وشرحها.</p>
+                 {!apiKey && <p className="text-amber-500 text-xs mt-2">(يرجى إعداد مفتاح API أولاً)</p>}
               </div>
 
               <form onSubmit={handleAiSubmit} className="space-y-4">
@@ -279,7 +321,7 @@ const App: React.FC = () => {
                       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
                       </svg>
-                      حل المسألة
+                      {!apiKey ? 'إعداد المفتاح والحل' : 'حل المسألة'}
                     </>
                   )}
                 </button>

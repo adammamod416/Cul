@@ -1,14 +1,11 @@
 import { GoogleGenAI, Type } from "@google/genai";
 
-const apiKey = process.env.API_KEY || '';
-
-// Initialize client only if key exists (handled gracefully in UI if missing)
-const ai = apiKey ? new GoogleGenAI({ apiKey }) : null;
-
-export const solveMathWithGemini = async (problem: string): Promise<{ answer: string; explanation: string }> => {
-  if (!ai) {
-    throw new Error("API Key is missing.");
+export const solveMathWithGemini = async (apiKey: string, problem: string): Promise<{ answer: string; explanation: string }> => {
+  if (!apiKey) {
+    throw new Error("يرجى إدخال مفتاح API في الإعدادات للمتابعة.");
   }
+
+  const ai = new GoogleGenAI({ apiKey });
 
   try {
     const response = await ai.models.generateContent({
@@ -41,11 +38,15 @@ export const solveMathWithGemini = async (problem: string): Promise<{ answer: st
     
     return JSON.parse(text);
 
-  } catch (error) {
+  } catch (error: any) {
     console.error("Gemini Error:", error);
-    return {
-      answer: "Error",
-      explanation: "فشل في الاتصال بالذكاء الاصطناعي. يرجى المحاولة مرة أخرى."
-    };
+    let errorMessage = "فشل في الاتصال بالذكاء الاصطناعي.";
+    
+    // Check for common API Key errors
+    if (error.toString().includes('API key') || error.status === 400 || error.status === 403) {
+        errorMessage = "مفتاح API غير صحيح أو منتهي الصلاحية.";
+    }
+    
+    throw new Error(errorMessage);
   }
 };
